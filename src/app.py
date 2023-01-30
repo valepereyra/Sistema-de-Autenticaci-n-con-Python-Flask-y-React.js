@@ -2,13 +2,17 @@
 This module takes care of starting the API Server, Loading the DB and Adding the endpoints
 """
 import os
-from flask import Flask, request, jsonify, url_for
+from flask import Flask, request, jsonify, url_for, json
 from flask_migrate import Migrate
 from flask_swagger import swagger
 from flask_cors import CORS
 from utils import APIException, generate_sitemap
 from admin import setup_admin
 from models import db, Usuario, Vehiculos, Planetas, Personajes, Favoritos
+from flask_jwt_extended import create_access_token
+from flask_jwt_extended import get_jwt_identity
+from flask_jwt_extended import jwt_required
+from flask_jwt_extended import JWTManager
 app = Flask(__name__)
 app.url_map.strict_slashes = False
 
@@ -23,6 +27,10 @@ MIGRATE = Migrate(app, db)
 db.init_app(app)
 CORS(app)
 setup_admin(app)
+
+# Setup the Flask-JWT-Extended extension
+app.config["JWT_SECRET_KEY"] = "super-secret"  # Change this!
+jwt = JWTManager(app)
 
 # Handle/serialize errors like a JSON object
 @app.errorhandler(APIException)
@@ -132,6 +140,39 @@ def eliminar_personaje_favorito(usuario_id):
     db.session.delete(query)
     db.session.commit() 
     return jsonify({"msg":"El favorito ha sido eliminado correctamente"}),200
+
+# Create a route to authenticate your users and return JWTs. The
+# create_access_token() function is used to actually generate the JWT.
+@app.route("/login", methods=["POST"])
+def login():
+    email = request.json.get("email", None)
+    password = request.json.get("password", None)
+    usuario= Usuario.query.filter_by(email=email, password=password).first()
+    if email != usuario.email or password != usuario.password:
+        return jsonify({"msg": "Bad username or password"}), 401
+
+    access_token = create_access_token(identity=email)
+    return jsonify(access_token=access_token)
+
+
+# Protect a route with jwt_required, which will kick out requests
+# without a valid JWT present.
+@app.route("/private", methods=["GET"])
+@jwt_required()
+def protected():
+    # Access the identity of the current user with get_jwt_identity
+    current_user = get_jwt_identity()
+    usuario= Usuario.query.filter_by(email=current_user).first()
+    response_body = {"msg":"ok", "user":usuario.serialize()}
+    return jsonify(response_body), 200
+
+@app.route('/signup', methods=['POST'])
+def add_new_user():
+    request_body = request.json
+    new_user = Usuario(id=request_body["id"], name=request_body["name"], password=request_body["password"],email=request_body["email"])
+    db.session.add(new_user)
+    db.session.commit()
+    return jsonify(request_body),200
 
 
 
