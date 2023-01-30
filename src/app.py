@@ -172,7 +172,7 @@ def add_new_user():
     new_user = Usuario(id=request_body["id"], name=request_body["name"], password=request_body["password"],email=request_body["email"])
     db.session.add(new_user)
     db.session.commit()
-    return jsonify(request_body),200
+    return jsonify({"msg":"Usuario creado correctamente"}),200
 
 
 
